@@ -1,5 +1,10 @@
-use std::rc::{Rc, Weak};
 use std::cell::RefCell;
+use std::collections::VecDeque;
+use std::error::Error;
+use std::fs::File;
+use std::rc::{Rc, Weak};
+
+use dot_writer::{Attributes, DotWriter, Rank, RankDirection, Style};
 
 #[derive(Debug)]
 pub struct Node {
@@ -12,7 +17,13 @@ pub struct Node {
 
 impl Node {
     fn new(key: i32, value: String) -> Self {
-        Self { key, value, parent: None, lhs: None, rhs: None }
+        Self {
+            key,
+            value,
+            parent: None,
+            lhs: None,
+            rhs: None,
+        }
     }
 }
 
@@ -26,7 +37,8 @@ impl BinaryTree {
         Self { root: None }
     }
 
-    pub fn insert(&mut self, key: i32, value: String) {
+    pub fn insert(&mut self, key: i32, value: String) -> Result<Rc<RefCell<Node>>, &'static str> {
+        // It's probably bad practice to directly expose data like this, I should probably refactor....
         match &self.root {
             Some(curr) => {
                 let mut curr = Rc::clone(&curr);
@@ -39,9 +51,9 @@ impl BinaryTree {
                             None => {
                                 let new_node = Rc::new(RefCell::new(Node::new(key, value)));
                                 new_node.borrow_mut().parent = Some(Rc::downgrade(&curr));
-                                cn.lhs = Some(new_node);
-                                return;
-                            },
+                                cn.lhs = Some(Rc::clone(&new_node));
+                                return Ok(new_node);
+                            }
                         };
                     } else if key > cn.key {
                         match &cn.rhs {
@@ -49,26 +61,111 @@ impl BinaryTree {
                             None => {
                                 let new_node = Rc::new(RefCell::new(Node::new(key, value)));
                                 new_node.borrow_mut().parent = Some(Rc::downgrade(&curr));
-                                cn.rhs = Some(new_node);
-                                return;
-                            },
+                                cn.rhs = Some(Rc::clone(&new_node));
+                                return Ok(new_node);
+                            }
                         };
-                    } else { //keys are equal, so key is already present
-                        return;
+                    } else {
+                        //keys are equal, so key is already present
+                        return Err("Key already present in tree");
                     }
                     drop(cn);
                     curr = next;
                 }
-            },
-            None => self.root = Some(Rc::new(RefCell::new(Node::new(key, value)))),
+            }
+            None => {
+                let new_node = Rc::new(RefCell::new(Node::new(key, value)));
+                self.root = Some(Rc::clone(&new_node));
+                return Ok(new_node);
+            }
         };
+    }
+
+    pub fn remove(&mut self, node: &Rc<RefCell<Node>>) {
+        let mut n = node.borrow_mut();
+        match (&n.lhs, &n.rhs) {
+            (Some(lhs), Some(rhs)) => todo!(),
+            (Some(lhs), None) => todo!(),
+            (None, Some(rhs)) => todo!(),
+            (None, None) => {
+                match &n.parent {
+                    Some(wp) => {
+                        if let Some(parent) = wp.upgrade() {
+                            let mut parent = parent.borrow_mut();
+                            match &parent.lhs {
+                                Some(lhs) => {
+                                    if Rc::ptr_eq(lhs, node) {
+                                        parent.lhs = None;
+                                    } else {
+                                        parent.rhs = None;
+                                    }
+                                }
+                                None => {
+                                    parent.rhs = None;
+                                }
+                            }
+                        }
+                    },
+                    None => {
+                        self.root = None;
+                    }
+                }
+            },
+        };
+    }
+
+    pub fn write_graphviz(&self, fname: &str) -> Result<(), Box<dyn Error>> {
+        let mut f = File::create(fname)?;
+        {
+            let mut writer = DotWriter::from(&mut f);
+            writer.set_pretty_print(true);
+
+            let mut digraph = writer.digraph();
+
+            if let Some(r) = &self.root {
+                let mut q: VecDeque<_> = VecDeque::<Rc<RefCell<Node>>>::new();
+                q.push_front(Rc::clone(&r));
+
+                while let Some(curr) = q.pop_back() {
+                    let cb = curr.borrow();
+                    {
+                        let mut n = digraph.node_named(cb.value.clone());
+                    }
+
+                    if let (Some(lhs), Some(rhs)) = (&cb.lhs, &cb.rhs) {
+                        let mut sg = digraph.subgraph();
+                        sg.set_rank_direction(RankDirection::LeftRight);
+                        sg.set_rank(Rank::Same);
+                        sg.edge(lhs.borrow().value.clone(), rhs.borrow().value.clone())
+                            .attributes()
+                            .set_style(Style::Invisible);
+                    }
+
+                    if let Some(wp) = &cb.parent {
+                        if let Some(sp) = wp.upgrade() {
+                            let sp = sp.borrow();
+                            digraph.edge(sp.value.clone(), cb.value.clone());
+                        }
+                    }
+
+                    if let Some(lhs) = &cb.lhs {
+                        q.push_back(Rc::clone(lhs));
+                    }
+
+                    if let Some(rhs) = &cb.rhs {
+                        q.push_back(Rc::clone(rhs));
+                    }
+                }
+            }
+        }
+        Ok(())
     }
 }
 
 #[cfg(test)]
 mod test {
     use super::*;
-    
+
     #[test]
     fn node_initializer() {
         let _n = Node::new(0, "".to_string());
@@ -83,13 +180,13 @@ mod test {
     fn tree_insert() {
         let mut t = BinaryTree::new();
 
-        t.insert( 3, "foo".to_string());
-        t.insert( 1, "bar".to_string());
-        t.insert( 2, "biz".to_string());
-        t.insert(-1, "baz".to_string());
-        t.insert( 9, "buz".to_string());
-        t.insert( 4, "qux".to_string());
-        t.insert(13, "qox".to_string());
+        let _ = t.insert(3, "foo".to_string());
+        let _ = t.insert(1, "bar".to_string());
+        let _ = t.insert(2, "biz".to_string());
+        let _ = t.insert(-1, "baz".to_string());
+        let _ = t.insert(9, "buz".to_string());
+        let _ = t.insert(4, "qux".to_string());
+        let _ = t.insert(13, "qox".to_string());
 
         match &t.root {
             None => panic!("Newly inserted key does not exist!"),
@@ -97,7 +194,7 @@ mod test {
                 assert_eq!(r.borrow().key, 3);
                 assert_eq!(r.borrow().value, "foo");
                 assert!(r.borrow().parent.is_none());
-                
+
                 match &r.borrow().lhs {
                     None => panic!("Root lhs node does not exist!"),
                     Some(lhs) => {
@@ -110,7 +207,7 @@ mod test {
                                     None => panic!("Root lhs parent no longer exists"),
                                     Some(sp) => assert!(Rc::ptr_eq(&sp, &r)),
                                 };
-                            },
+                            }
                         };
 
                         match &lhs.borrow().lhs {
@@ -125,11 +222,11 @@ mod test {
                                             None => panic!("Root llhs parent no longer exists"),
                                             Some(sp) => assert!(Rc::ptr_eq(&sp, &lhs)),
                                         };
-                                    },
+                                    }
                                 };
-                            },
+                            }
                         };
-                        
+
                         match &lhs.borrow().rhs {
                             None => panic!("Root lrhs node does not exist!"),
                             Some(lrhs) => {
@@ -142,13 +239,13 @@ mod test {
                                             None => panic!("Root lrhs parent no longer exists"),
                                             Some(sp) => assert!(Rc::ptr_eq(&sp, &lhs)),
                                         };
-                                    },
+                                    }
                                 };
-                            },
+                            }
                         };
-                    },
+                    }
                 };
-                
+
                 match &r.borrow().rhs {
                     None => panic!("Root rhs node does not exist!"),
                     Some(rhs) => {
@@ -161,7 +258,7 @@ mod test {
                                     None => panic!("Root lhs parent no longer exists"),
                                     Some(sp) => assert!(Rc::ptr_eq(&sp, &r)),
                                 };
-                            },
+                            }
                         };
 
                         match &rhs.borrow().lhs {
@@ -176,11 +273,11 @@ mod test {
                                             None => panic!("Root rlhs parent no longer exists"),
                                             Some(sp) => assert!(Rc::ptr_eq(&sp, &rhs)),
                                         };
-                                    },
+                                    }
                                 };
-                            },
+                            }
                         };
-                        
+
                         match &rhs.borrow().rhs {
                             None => panic!("Root lrhs node does not exist!"),
                             Some(rrhs) => {
@@ -193,13 +290,38 @@ mod test {
                                             None => panic!("Root rrhs parent no longer exists"),
                                             Some(sp) => assert!(Rc::ptr_eq(&sp, &rhs)),
                                         };
-                                    },
+                                    }
                                 };
-                            },
+                            }
                         };
-                    },
+                    }
                 };
-            },
+            }
         };
+
+        let _ = t.write_graphviz("out/insertion_test.dot");
+    }
+    
+    #[test]
+    fn tree_remove() {
+        let mut t = BinaryTree::new();
+
+        if let Ok(n) = t.insert(3, "foo".to_string()) {
+            println!("{t:?}");
+            t.remove(&n);
+            println!("{t:?}");
+        }
+
+        let r = t.insert(3, "foo".to_string()).unwrap();
+        let lhs = t.insert(2, "bar".to_string()).unwrap();
+        let rhs = t.insert(4, "buz".to_string()).unwrap();
+            
+        println!("{t:?}");
+        t.remove(&lhs);
+        println!("{t:?}");
+        t.remove(&rhs);
+        println!("{t:?}");
+        t.remove(&r);
+        println!("{t:?}");
     }
 }

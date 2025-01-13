@@ -8,3 +8,4 @@ readme = "README.md"
 license = "MIT OR Apache-2.0"
 
 [dependencies]
+dot-writer = "0.1.4"
