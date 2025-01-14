@@ -2,6 +2,7 @@ use std::cell::RefCell;
 use std::collections::VecDeque;
 use std::error::Error;
 use std::fs::File;
+use std::fmt;
 use std::rc::{Rc, Weak};
 
 use dot_writer::{Attributes, DotWriter, Rank, RankDirection, Style};
@@ -26,6 +27,20 @@ impl Node {
         }
     }
 }
+
+impl fmt::Display for Node {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "Node({}: {})", self.key, self.value)
+    }
+}
+
+impl PartialEq for Node {
+    fn eq(&self, other: &Self) -> bool {
+        self.key == other.key && self.value == other.value
+    }
+}
+
+impl Eq for Node {}
 
 #[derive(Debug)]
 pub struct BinaryTree {
@@ -86,7 +101,30 @@ impl BinaryTree {
         match (&n.lhs, &n.rhs) {
             (Some(lhs), Some(rhs)) => todo!(),
             (Some(lhs), None) => todo!(),
-            (None, Some(rhs)) => todo!(),
+            (None, Some(rhs)) => {
+                match &n.parent {
+                    Some(wp) => {
+                        if let Some(parent) = wp.upgrade() {
+                            let mut parent = parent.borrow_mut();
+                            match &parent.lhs {
+                                Some(lhs) => {
+                                    if Rc::ptr_eq(lhs, node) {
+                                        let _ = parent.lhs.replace(Rc::clone(rhs));
+                                    } else {
+                                        let _ = parent.rhs.replace(Rc::clone(rhs));
+                                    }
+                                }
+                                None => {
+                                    let _ = parent.rhs.replace(Rc::clone(rhs));
+                                }
+                            }
+                        }
+                    },
+                    None => {
+                        self.root.replace(Rc::clone(rhs));
+                    }
+                }
+            },
             (None, None) => {
                 match &n.parent {
                     Some(wp) => {
@@ -174,6 +212,40 @@ mod test {
     #[test]
     fn tree_initializer() {
         let _t = BinaryTree::new();
+    }
+
+    #[test]
+    fn tree_repeat_insert() {
+        let mut t = BinaryTree::new();
+        match t.insert(3, "foo".to_string()) {
+            Ok(_) => (),
+            Err(_) => panic!("Failed to insert Node[3] = \"foo\""),
+        }
+
+        match t.insert(3, "foo".to_string()) {
+            Ok(_) => panic!("Repeated insert of Node[3] = \"foo\" should Err"),
+            Err(_) => (),
+        }
+        
+        match t.insert(4, "bar".to_string()) {
+            Ok(_) => (),
+            Err(_) => panic!("Failed to insert Node[4] = \"bar\""),
+        }
+
+        match t.insert(4, "bar".to_string()) {
+            Ok(_) => panic!("Repeated insert of Node[4] = \"bar\" should Err"),
+            Err(_) => (),
+        }
+        
+        match t.insert(2, "buz".to_string()) {
+            Ok(_) => (),
+            Err(_) => panic!("Failed to insert Node[2] = \"buz\""),
+        }
+
+        match t.insert(2, "buz".to_string()) {
+            Ok(_) => panic!("Repeated insert of Node[2] = \"buz\" should Err"),
+            Err(_) => (),
+        }
     }
 
     #[test]
@@ -303,7 +375,7 @@ mod test {
     }
     
     #[test]
-    fn tree_remove() {
+    fn tree_remove_leaves() {
         let mut t = BinaryTree::new();
 
         if let Ok(n) = t.insert(3, "foo".to_string()) {
@@ -323,5 +395,115 @@ mod test {
         println!("{t:?}");
         t.remove(&r);
         println!("{t:?}");
+    }
+
+    fn struct_compare(b: &BinaryTree, v: &Vec<Option<Node>>) -> Result<(), String> {
+        if v.len() == 0 {
+            match b.root {
+                Some(_) => return Err("Binary Tree should be Empty".to_string()),
+                None => return Ok(()),
+            }
+        } else {
+            match &b.root {
+                None => return Err("Binary Tree is Empty".to_string()),
+                Some(r) => {
+                    let mut visited = vec![false; v.len()];
+                    let mut curr = Rc::clone(r);
+                    let mut ind = 0;
+
+                    while !visited[0] {
+                        let next: Rc<RefCell<Node>>;
+                        {
+                            let cn = curr.borrow();
+    
+                            match &v[ind] {
+                                Some(n) => {
+                                    if *cn !=  *n {
+                                        return Err(format!("Actual: {}, Expected: {}", *cn, *n));
+                                    }
+                                },
+                                None => return Err("".to_string()),
+                            }
+                                
+                            match (&cn.lhs, &cn.rhs) {
+                                (Some(lhs), Some(rhs)) => {
+                                    if !visited[2 * ind] { // Visit left child first
+                                        match v[2 * ind] {
+                                            Some(_) => {
+                                                ind = 2 * ind;
+                                                next = Rc::clone(lhs);
+                                            },
+                                            None => return Err(format!("Unexpected node left of {}", *cn)),
+                                        };
+                                    } else if !visited[2 * ind + 1] { // Visit right child next
+                                        match v[2 * ind] {
+                                            Some(_) => {
+                                                ind = 2 * ind + 1;
+                                                next = Rc::clone(rhs);
+                                            },
+                                            None => return Err(format!("Unexpected node right of {}", *cn)),
+                                        };
+                                    } else { // Move up
+                                        visited[ind] = true;
+                                        next = move_up(Rc::clone(&curr))?;
+                                        ind = ind / 2;
+                                    }
+                                },
+                                (Some(lhs), None) => {
+                                    if visited[2 * ind] { // If child is visited, step up
+                                        visited[ind] = true;
+                                        next = move_up(Rc::clone(&curr))?;
+                                        ind = ind / 2;
+                                    } else { // Other wise step into child
+                                        match v[2 * ind] {
+                                            Some(_) => {
+                                                ind = 2 * ind;
+                                                next = Rc::clone(lhs);
+                                            },
+                                            None => return Err(format!("Unexpected node left of {}", *cn)),
+                                        };
+                                    }
+                                },
+                                (None, Some(rhs)) => {
+                                    if visited[2 * ind + 1] { // If child is visited, step up
+                                        visited[ind] = true;
+                                        next = move_up(Rc::clone(&curr))?;
+                                        ind = ind / 2;
+                                    } else { // Other wise step into child
+                                        match v[2 * ind + 1] {
+                                            Some(_) => {
+                                                ind = 2 * ind + 1;
+                                                next = Rc::clone(rhs);
+                                            },
+                                            None => return Err(format!("Unexpected node right of {}", *cn)),
+                                        };
+                                    }
+                                },
+                                (None, None) => { // if leaf node mark as visited and move up
+                                    visited[ind] = true;
+                                    next = move_up(Rc::clone(&curr))?;
+                                    ind = ind / 2;
+                                }
+                            }
+                        }
+                        curr = next;
+                    }
+                }
+            }
+        }
+        Ok(())
+    }
+
+    fn move_up(rn: Rc<RefCell<Node>>) -> Result<Rc<RefCell<Node>>, String> {
+        let n = rn.borrow();
+        match &n.parent {
+            Some(wp) => {
+                match wp.upgrade() {
+                    None => Err(format!("{} parent missing", n)),
+                    Some(sp) => Ok(Rc::clone(&sp)),
+                }
+            },
+            None => Err(format!("{} has no parent", n)),
+        }
     }
 }
