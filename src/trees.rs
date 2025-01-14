@@ -249,129 +249,66 @@ mod test {
     }
 
     #[test]
-    fn tree_insert() {
+    fn tree_insert() -> Result<(), String> {
         let mut t = BinaryTree::new();
+        let nodes: Vec<_> = vec![
+            Some(Node::new(4, "foo".to_string())),
+            Some(Node::new(2, "bar".to_string())),
+            Some(Node::new(6, "buz".to_string())),
+            Some(Node::new(1, "qix".to_string())),
+            Some(Node::new(3, "qax".to_string())),
+            Some(Node::new(5, "qux".to_string())),
+            Some(Node::new(7, "qox".to_string())),
+        ];
 
-        let _ = t.insert(3, "foo".to_string());
-        let _ = t.insert(1, "bar".to_string());
-        let _ = t.insert(2, "biz".to_string());
-        let _ = t.insert(-1, "baz".to_string());
-        let _ = t.insert(9, "buz".to_string());
-        let _ = t.insert(4, "qux".to_string());
-        let _ = t.insert(13, "qox".to_string());
-
-        match &t.root {
-            None => panic!("Newly inserted key does not exist!"),
-            Some(r) => {
-                assert_eq!(r.borrow().key, 3);
-                assert_eq!(r.borrow().value, "foo");
-                assert!(r.borrow().parent.is_none());
-
-                match &r.borrow().lhs {
-                    None => panic!("Root lhs node does not exist!"),
-                    Some(lhs) => {
-                        assert_eq!(lhs.borrow().key, 1);
-                        assert_eq!(lhs.borrow().value, "bar");
-                        match &lhs.borrow().parent {
-                            None => panic!("Root lhs parent not set"),
-                            Some(wp) => {
-                                match wp.upgrade() {
-                                    None => panic!("Root lhs parent no longer exists"),
-                                    Some(sp) => assert!(Rc::ptr_eq(&sp, &r)),
-                                };
-                            }
-                        };
-
-                        match &lhs.borrow().lhs {
-                            None => panic!("Root llhs node does not exist!"),
-                            Some(llhs) => {
-                                assert_eq!(llhs.borrow().key, -1);
-                                assert_eq!(llhs.borrow().value, "baz");
-                                match &llhs.borrow().parent {
-                                    None => panic!("Root llhs parent not set"),
-                                    Some(wp) => {
-                                        match wp.upgrade() {
-                                            None => panic!("Root llhs parent no longer exists"),
-                                            Some(sp) => assert!(Rc::ptr_eq(&sp, &lhs)),
-                                        };
-                                    }
-                                };
-                            }
-                        };
-
-                        match &lhs.borrow().rhs {
-                            None => panic!("Root lrhs node does not exist!"),
-                            Some(lrhs) => {
-                                assert_eq!(lrhs.borrow().key, 2);
-                                assert_eq!(lrhs.borrow().value, "biz");
-                                match &lrhs.borrow().parent {
-                                    None => panic!("Root lrhs parent not set"),
-                                    Some(wp) => {
-                                        match wp.upgrade() {
-                                            None => panic!("Root lrhs parent no longer exists"),
-                                            Some(sp) => assert!(Rc::ptr_eq(&sp, &lhs)),
-                                        };
-                                    }
-                                };
-                            }
-                        };
-                    }
-                };
-
-                match &r.borrow().rhs {
-                    None => panic!("Root rhs node does not exist!"),
-                    Some(rhs) => {
-                        assert_eq!(rhs.borrow().key, 9);
-                        assert_eq!(rhs.borrow().value, "buz");
-                        match &rhs.borrow().parent {
-                            None => panic!("Root lhs parent not set"),
-                            Some(wp) => {
-                                match wp.upgrade() {
-                                    None => panic!("Root lhs parent no longer exists"),
-                                    Some(sp) => assert!(Rc::ptr_eq(&sp, &r)),
-                                };
-                            }
-                        };
-
-                        match &rhs.borrow().lhs {
-                            None => panic!("Root llhs node does not exist!"),
-                            Some(rlhs) => {
-                                assert_eq!(rlhs.borrow().key, 4);
-                                assert_eq!(rlhs.borrow().value, "qux");
-                                match &rlhs.borrow().parent {
-                                    None => panic!("Root rlhs parent not set"),
-                                    Some(wp) => {
-                                        match wp.upgrade() {
-                                            None => panic!("Root rlhs parent no longer exists"),
-                                            Some(sp) => assert!(Rc::ptr_eq(&sp, &rhs)),
-                                        };
-                                    }
-                                };
-                            }
-                        };
-
-                        match &rhs.borrow().rhs {
-                            None => panic!("Root lrhs node does not exist!"),
-                            Some(rrhs) => {
-                                assert_eq!(rrhs.borrow().key, 13);
-                                assert_eq!(rrhs.borrow().value, "qox");
-                                match &rrhs.borrow().parent {
-                                    None => panic!("Root rrhs parent not set"),
-                                    Some(wp) => {
-                                        match wp.upgrade() {
-                                            None => panic!("Root rrhs parent no longer exists"),
-                                            Some(sp) => assert!(Rc::ptr_eq(&sp, &rhs)),
-                                        };
-                                    }
-                                };
-                            }
-                        };
-                    }
-                };
+        for i in 0..nodes.len() {
+            if let Some(n) = &nodes[i] {
+                let _ = t.insert(n.key, n.value.clone())?;
             }
-        };
+            struct_compare(&t, &nodes[0..=i]);
+        }
+        
+        let mut t = BinaryTree::new();
+        let nodes: Vec<_> = vec![
+            Some(Node::new(4, "foo".to_string())),
+            Some(Node::new(2, "bar".to_string())),
+            Some(Node::new(6, "buz".to_string())),
+            None,
+            None,
+            Some(Node::new(5, "qux".to_string())),
+            Some(Node::new(7, "qox".to_string())),
+        ];
+
+        for i in 0..nodes.len() {
+            if let Some(n) = &nodes[i] {
+                let _ = t.insert(n.key, n.value.clone())?;
+            }
+            struct_compare(&t, &nodes[0..=i]);
+        }
+        
+        let mut t = BinaryTree::new();
+        let nodes: Vec<_> = vec![
+            Some(Node::new(4, "foo".to_string())),
+            Some(Node::new(2, "bar".to_string())),
+            None,
+            None,
+            None,
+            Some(Node::new(5, "qux".to_string())),
+            None,
+        ];
+
+        for i in 0..nodes.len() {
+            if let Some(n) = &nodes[i] {
+                let _ = t.insert(n.key, n.value.clone())?;
+            }
+            struct_compare(&t, &nodes[0..=i]);
+        }
+
+
+        
 
         let _ = t.write_graphviz("out/insertion_test.dot");
+        Ok(())
     }
     
     #[test]
@@ -379,7 +316,6 @@ mod test {
         let mut t = BinaryTree::new();
 
         if let Ok(n) = t.insert(3, "foo".to_string()) {
-            println!("{t:?}");
             t.remove(&n);
             println!("{t:?}");
         }
@@ -397,7 +333,7 @@ mod test {
         println!("{t:?}");
     }
 
-    fn struct_compare(b: &BinaryTree, v: &Vec<Option<Node>>) -> Result<(), String> {
+    fn struct_compare(b: &BinaryTree, v: &[Option<Node>]) -> Result<(), String> {
         if v.len() == 0 {
             match b.root {
                 Some(_) => return Err("Binary Tree should be Empty".to_string()),
@@ -421,24 +357,25 @@ mod test {
                                     if *cn !=  *n {
                                         return Err(format!("Actual: {}, Expected: {}", *cn, *n));
                                     }
+
                                 },
-                                None => return Err("".to_string()),
+                                None => return Err("Node present in tree missing from Vec".to_string()),
                             }
-                                
+                               
                             match (&cn.lhs, &cn.rhs) {
                                 (Some(lhs), Some(rhs)) => {
-                                    if !visited[2 * ind] { // Visit left child first
-                                        match v[2 * ind] {
+                                    if !visited[2 * ind + 1] { // Visit left child first
+                                        match v[2 * ind + 1] {
                                             Some(_) => {
-                                                ind = 2 * ind;
+                                                ind = 2 * ind + 1;
                                                 next = Rc::clone(lhs);
                                             },
                                             None => return Err(format!("Unexpected node left of {}", *cn)),
                                         };
-                                    } else if !visited[2 * ind + 1] { // Visit right child next
-                                        match v[2 * ind] {
+                                    } else if !visited[2 * ind + 2] { // Visit right child next
+                                        match v[2 * ind + 2] {
                                             Some(_) => {
-                                                ind = 2 * ind + 1;
+                                                ind = 2 * ind + 2;
                                                 next = Rc::clone(rhs);
                                             },
                                             None => return Err(format!("Unexpected node right of {}", *cn)),
@@ -446,18 +383,18 @@ mod test {
                                     } else { // Move up
                                         visited[ind] = true;
                                         next = move_up(Rc::clone(&curr))?;
-                                        ind = ind / 2;
+                                        ind = (ind - 1) / 2;
                                     }
                                 },
                                 (Some(lhs), None) => {
-                                    if visited[2 * ind] { // If child is visited, step up
+                                    if visited[2 * ind + 1] { // If child is visited, step up
                                         visited[ind] = true;
                                         next = move_up(Rc::clone(&curr))?;
-                                        ind = ind / 2;
+                                        ind = (ind - 1) / 2;
                                     } else { // Other wise step into child
-                                        match v[2 * ind] {
+                                        match v[2 * ind + 1] {
                                             Some(_) => {
-                                                ind = 2 * ind;
+                                                ind = 2 * ind + 1;
                                                 next = Rc::clone(lhs);
                                             },
                                             None => return Err(format!("Unexpected node left of {}", *cn)),
@@ -465,14 +402,15 @@ mod test {
                                     }
                                 },
                                 (None, Some(rhs)) => {
-                                    if visited[2 * ind + 1] { // If child is visited, step up
+                                    println!("{:?}", *cn);
+                                    if visited[2 * ind + 2] { // If child is visited, step up
                                         visited[ind] = true;
                                         next = move_up(Rc::clone(&curr))?;
-                                        ind = ind / 2;
+                                        ind = (ind - 1) / 2;
                                     } else { // Other wise step into child
-                                        match v[2 * ind + 1] {
+                                        match v[2 * ind + 2] {
                                             Some(_) => {
-                                                ind = 2 * ind + 1;
+                                                ind = 2 * ind + 2;
                                                 next = Rc::clone(rhs);
                                             },
                                             None => return Err(format!("Unexpected node right of {}", *cn)),
@@ -482,7 +420,7 @@ mod test {
                                 (None, None) => { // if leaf node mark as visited and move up
                                     visited[ind] = true;
                                     next = move_up(Rc::clone(&curr))?;
-                                    ind = ind / 2;
+                                    ind = (ind - 1) / 2;
                                 }
                             }
                         }
