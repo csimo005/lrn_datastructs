@@ -67,12 +67,11 @@ impl Eq for Node {}
 
 pub struct BinaryTree {
     root: Option<Rc<RefCell<Node>>>, // Box may have been sufficient, but this makes recurrent calls more ergonomic
-    node_list: Vec<Rc<RefCell<Node>>>,
 }
 
 impl BinaryTree {
     pub fn new() -> Self {
-        Self { root: None, node_list: Vec::<Rc<RefCell<Node>>>::new()}
+        Self { root: None}
     }
 
     pub fn insert(&mut self, key: i32, value: String) -> Result<Rc<RefCell<Node>>, &'static str> {
@@ -88,7 +87,6 @@ impl BinaryTree {
                             Some(node) => next = Rc::clone(&node),
                             None => {
                                 let new_node = Rc::new(RefCell::new(Node::new(key, value)));
-                                self.node_list.push(Rc::clone(&new_node));
                                 new_node.borrow_mut().parent = Some(Rc::downgrade(&curr));
                                 cn.lhs = Some(Rc::clone(&new_node));
                                 return Ok(new_node);
@@ -99,7 +97,6 @@ impl BinaryTree {
                             Some(node) => next = Rc::clone(&node),
                             None => {
                                 let new_node = Rc::new(RefCell::new(Node::new(key, value)));
-                                self.node_list.push(Rc::clone(&new_node));
                                 new_node.borrow_mut().parent = Some(Rc::downgrade(&curr));
                                 cn.rhs = Some(Rc::clone(&new_node));
                                 return Ok(new_node);
@@ -115,7 +112,6 @@ impl BinaryTree {
             }
             None => {
                 let new_node = Rc::new(RefCell::new(Node::new(key, value)));
-                self.node_list.push(Rc::clone(&new_node));
                 self.root = Some(Rc::clone(&new_node));
                 return Ok(new_node);
             }
@@ -192,15 +188,6 @@ impl BinaryTree {
                 };
 
                 //Reborrow in case the previous block modified node
-                //let node_parent: Option<Weak<RefCell<Node>>>;
-                //let node_lhs: Option<Rc<RefCell<Node>>>;
-                //let node_rhs: Option<Rc<RefCell<Node>>>;
-                //{ // We get lhs, rhs, and parent here to make sure this borrow goes out of scope before the next match
-                //    let n = node.borrow();
-                //    node_parent = n.parent.as_ref().map(|parent| Weak::clone(parent));
-                //    node_lhs = n.lhs.as_ref().map(|child| Rc::clone(child));
-                //    node_rhs = n.rhs.as_ref().map(|child| Rc::clone(child));
-                //}
                 let n = node.borrow();
                 match &n.lhs {
                     Some(lhs) => {
@@ -378,8 +365,24 @@ impl BinaryTree {
 impl fmt::Debug for BinaryTree {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "Node List:\n")?;
-        for n in &self.node_list {
-            write!(f, "\t{:?}, Count: {}\n", n.borrow(), Rc::strong_count(n)-1)?;
+
+        let mut q = VecDeque::<Rc<RefCell<Node>>>::new();
+        match &self.root {
+            Some(root) => q.push_front(Rc::clone(&root)),
+            None => (),
+        };
+
+        while let Some(node) = q.pop_back() {
+            let n = node.borrow();
+            write!(f, "\t{:?}, Count: {}\n", n, Rc::strong_count(&node)-1)?;
+            match &n.lhs {
+                Some(lhs) => q.push_front(Rc::clone(&lhs)),
+                None => (),
+            };
+            match &n.rhs {
+                Some(rhs) => q.push_front(Rc::clone(&rhs)),
+                None => (),
+            };
         }
 
         Ok(())
