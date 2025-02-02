@@ -314,6 +314,39 @@ impl BinaryTree {
         };
     }
 
+    pub fn get(&self, key: i32) -> Option<Rc<RefCell<Node>>> {
+        match &self.root {
+            Some(curr) => {
+                let mut curr = Rc::clone(&curr);
+                loop {
+                    let next: Rc<RefCell<Node>>;
+                    let cn = curr.borrow();
+                    if key < cn.key {
+                        match &cn.lhs {
+                            Some(node) => next = Rc::clone(&node),
+                            None => {
+                                return None;
+                            }
+                        };
+                    } else if key > cn.key {
+                        match &cn.rhs {
+                            Some(node) => next = Rc::clone(&node),
+                            None => {
+                                return None;
+                            }
+                        };
+                    } else {
+                        //keys are equal, so key is already present
+                        return Some(Rc::clone(&curr));
+                    }
+                    drop(cn);
+                    curr = next;
+                }
+            }
+            None => None,
+        }
+    }
+
     pub fn write_graphviz(&self, fname: &str) -> Result<(), Box<dyn Error>> {
         let mut f = File::create(fname)?;
         {
@@ -716,6 +749,46 @@ mod test {
         println!("{t:?}\n");
         struct_compare(&t, &nodes)?;
 
+
+        Ok(())
+    }
+    
+    #[test]
+    fn tree_get() -> Result<(), String> {
+        let mut t = BinaryTree::new();
+        let nodes: Vec<_> = vec![
+            Some(Node::new(4, "foo".to_string())),
+            Some(Node::new(2, "bar".to_string())),
+            Some(Node::new(6, "buz".to_string())),
+            Some(Node::new(1, "qix".to_string())),
+            Some(Node::new(3, "qax".to_string())),
+            Some(Node::new(5, "qux".to_string())),
+            Some(Node::new(7, "qox".to_string())),
+        ];
+
+        let mut node_refs = Vec::<Option<Rc<RefCell<Node>>>>::new();
+        for i in 0..nodes.len() {
+            if let Some(n) = &nodes[i] {
+                match t.insert(n.key, n.value.clone()) {
+                    Ok(ret) => node_refs.push(Some(ret)),
+                    Err(e) => return Err(e.to_string()),
+                };
+            }
+        }
+
+        for i in 0..node_refs.len()  {
+            match &node_refs[i] {
+                Some(node) => match t.get(node.borrow().key) {
+                    Some(ret) => assert!(Rc::ptr_eq(&node, &ret)),
+                    None => (),
+                },
+                None => (),
+            }
+        }
+
+        assert!(t.get(10).is_none());
+        assert!(t.get(15).is_none());
+        assert!(t.get(-1).is_none());
 
         Ok(())
     }
