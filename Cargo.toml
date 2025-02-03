@@ -2,7 +2,7 @@
 name = "lrn_datastructs"
 version = "0.1.0"
 edition = "2021"
-author = "Cody Simons <csimo005@ucr.edu>"
+authors = ["Cody Simons <csimo005@ucr.edu>"]
 repository = "https://github.com/csimo005/lrn_datastructs"
 readme = "README.md"
 license = "MIT OR Apache-2.0"
