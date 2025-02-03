@@ -1,6 +1,7 @@
 use std::error::Error;
 
 pub mod binary_tree;
+pub mod avl_tree;
 
 pub trait BinarySearchTree {
     fn insert(&mut self, key: i32, value: String) -> Result<(), BSTError>;
